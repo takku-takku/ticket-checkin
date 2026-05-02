@@ -59,8 +59,13 @@ let used = JSON.parse(localStorage.getItem('used') || '{}');
 
 function updateCounts(){
   document.getElementById('count').textContent = Object.keys(master).length;
-  document.getElementById('unsynced').textContent =
-    Object.values(used).filter(x=>!x.synced).length;
+
+  const unsynced = Object.values(used).filter(x=>!x.synced).length;
+  document.getElementById('unsynced').textContent = unsynced;
+
+  // 👇これ追加
+  document.getElementById('checkedCount').textContent =
+    Object.keys(used).length;
 }
 
 function setResult(cls, text, detail=''){
