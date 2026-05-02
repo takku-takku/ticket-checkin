@@ -58,14 +58,13 @@ let master = {};
 let used = JSON.parse(localStorage.getItem('used') || '{}');
 
 function updateCounts(){
-  document.getElementById('count').textContent = Object.keys(master).length;
+  const total = Object.keys(master).length;
+  const checked = Object.keys(used).length;
+  const unsynced = Object.values(used).filter(x => !x.synced).length;
 
-  const unsynced = Object.values(used).filter(x=>!x.synced).length;
+  document.getElementById('count').textContent = total;
   document.getElementById('unsynced').textContent = unsynced;
-
-  // 👇これ追加
-  document.getElementById('checkedCount').textContent =
-    Object.keys(used).length;
+  document.getElementById('checkedCount').textContent = checked + ' / ' + total;
 }
 
 function setResult(cls, text, detail=''){
@@ -195,14 +194,16 @@ function handleQR(raw){
     return;
   }
 
-  used[tid] = {
-    tid:tid,
-    usedAt:new Date().toISOString(),
-    synced:false
+    used[tid] = {
+    tid: tid,
+    usedAt: new Date().toISOString(),
+    synced: false
   };
-  saveUsed();
 
-  setResult('ok','OK', m.buyer+' 様');
+  localStorage.setItem('used', JSON.stringify(used));
+  updateCounts();
+
+  setResult('ok', 'OK', m.buyer + ' 様');
 }
 
 loadLocal();
