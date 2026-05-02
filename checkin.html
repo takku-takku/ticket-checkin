@@ -79,10 +79,9 @@ function decodeQR(qr){
 async function loadMaster(){
   setResult('', '取得中...');
   const res = await fetch(GAS_URL, {
-    method:'POST',
-    headers:{'Content-Type':'text/plain'},
-    body:JSON.stringify({action:'loadMaster'})
-  });
+  method:'POST',
+  body: JSON.stringify({action:'loadMaster'})
+});
   const data = await res.json();
   master = data.result.tickets || {};
   localStorage.setItem('master', JSON.stringify(master));
