@@ -45,7 +45,7 @@ button { width:100%; padding:14px; margin-top:8px; font-size:18px; border-radius
 </div>
 
 <script>
-const GAS_URL = 'ここにあなたのApps ScriptのURL';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbws2XzIg2hytxKEcU89m3tV4FF5cE4vRMfm4vltMcjxKC2vquWo2t9BJAkbdhPQVWdVZQ/exec';
 
 let master = {};
 let used = JSON.parse(localStorage.getItem('used') || '{}');
@@ -77,18 +77,31 @@ function decodeQR(qr){
 }
 
 async function loadMaster(){
-  setResult('', '取得中...');
-  const res = await fetch(GAS_URL, {
-  method:'POST',
-  body: JSON.stringify({action:'loadMaster'})
-});
-  const data = await res.json();
-  master = data.result.tickets || {};
-  localStorage.setItem('master', JSON.stringify(master));
-  updateCounts();
-  setResult('ok','保存完了');
-}
+  try {
+    setResult('', '取得中...');
 
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'loadMaster' })
+    });
+
+    const data = await res.json();
+
+    if (!data.ok) {
+      setResult('ng', '取得失敗', data.error || 'APIエラー');
+      return;
+    }
+
+    master = data.result.tickets || {};
+    localStorage.setItem('master', JSON.stringify(master));
+    updateCounts();
+
+    setResult('ok', '保存完了', '保存件数: ' + Object.keys(master).length);
+
+  } catch (e) {
+    setResult('ng', '取得エラー', e.message || String(e));
+  }
+}
 function loadLocal(){
   master = JSON.parse(localStorage.getItem('master') || '{}');
   updateCounts();
