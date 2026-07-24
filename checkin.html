@@ -5,17 +5,78 @@
 <title>QR受付（オフライン対応）</title>
 
 <style>
-body { font-family:sans-serif; padding:10px; text-align:center; background:#f7f7f7; }
-.card { background:#fff; padding:12px; margin:10px 0; border-radius:12px; }
-video { width:100%; max-width:420px; border-radius:10px; }
-#result { font-size:36px; margin:10px; font-weight:bold; padding:10px; border-radius:10px; }
-.ok { background:#e7f8eb; color:#0b6b2a; }
-.ng { background:#fdeaea; color:#a11a1a; }
-.used { background:#fff3cd; color:#8a5a00; }
-button { width:100%; padding:14px; margin-top:8px; font-size:18px; border-radius:10px; border:none; }
-.primary { background:#111; color:#fff; }
-.secondary { background:#ddd; }
-.small { font-size:13px; color:#666; margin-top:6px; }
+body {
+  font-family: sans-serif;
+  padding: 10px;
+  text-align: center;
+  background: #f7f7f7;
+}
+
+.card {
+  background: #fff;
+  padding: 12px;
+  margin: 10px 0;
+  border-radius: 12px;
+}
+
+video {
+  width: 100%;
+  max-width: 420px;
+  border-radius: 10px;
+}
+
+#result {
+  font-size: 36px;
+  margin: 10px;
+  font-weight: bold;
+  padding: 10px;
+  border-radius: 10px;
+}
+
+.ok {
+  background: #e7f8eb;
+  color: #0b6b2a;
+}
+
+.ng {
+  background: #fdeaea;
+  color: #a11a1a;
+}
+
+.used {
+  background: #fff3cd;
+  color: #8a5a00;
+}
+
+button {
+  width: 100%;
+  padding: 14px;
+  margin-top: 8px;
+  font-size: 18px;
+  border-radius: 10px;
+  border: none;
+}
+
+.primary {
+  background: #111;
+  color: #fff;
+}
+
+.secondary {
+  background: #ddd;
+  color: #222;
+}
+
+.danger {
+  background: #b3261e;
+  color: #fff;
+}
+
+.small {
+  font-size: 13px;
+  color: #666;
+  margin-top: 6px;
+}
 </style>
 
 </head>
@@ -23,190 +84,643 @@ button { width:100%; padding:14px; margin-top:8px; font-size:18px; border-radius
 <body>
 
 <div class="card">
-<h2>QR受付（オフライン対応）</h2>
+  <h2>QR受付（オフライン対応）</h2>
 
-<video id="video" autoplay playsinline muted></video>
+  <video id="video" autoplay playsinline muted></video>
 
-<button class="primary" onclick="startCamera()">カメラ開始</button>
-<button class="secondary" onclick="stopCamera()">停止</button>
+  <button class="primary" onclick="startCamera()">カメラ開始</button>
+  <button class="secondary" onclick="stopCamera()">停止</button>
 
-<div id="result">待機中</div>
-<div id="detail" class="small"></div>
+  <div id="result">待機中</div>
+  <div id="detail" class="small"></div>
 </div>
 
 <div class="card">
   <strong>受付状況</strong>
+
   <div class="small">
-    受付人数: <span id="checkedCount">0</span>
+    受付人数:
+    <span id="checkedCount">0</span>
   </div>
-</div>  
-  
-<div class="card">
-<button class="primary" onclick="loadMaster()">最新チケットを保存</button>
-<div class="small">保存済み: <span id="count">0</span></div>
+
+  <button class="danger" onclick="resetReception()">
+    受付状況をリセット
+  </button>
+
+  <div class="small">
+    ※未同期データがある場合はリセットできません。
+  </div>
 </div>
 
 <div class="card">
-<button class="primary" onclick="syncUsed()">USEDを同期</button>
-<div class="small">未同期: <span id="unsynced">0</span></div>
+  <button class="primary" onclick="loadMaster()">
+    最新チケットを保存
+  </button>
+
+  <div class="small">
+    保存済み:
+    <span id="count">0</span>
+  </div>
+</div>
+
+<div class="card">
+  <button class="primary" onclick="syncUsed()">
+    USEDを同期
+  </button>
+
+  <div class="small">
+    未同期:
+    <span id="unsynced">0</span>
+  </div>
 </div>
 
 <script>
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbws2XzIg2hytxKEcU89m3tV4FF5cE4vRMfm4vltMcjxKC2vquWo2t9BJAkbdhPQVWdVZQ/exec';
+
+const GAS_URL =
+  'https://script.google.com/macros/s/AKfycbws2XzIg2hytxKEcU89m3tV4FF5cE4vRMfm4vltMcjxKC2vquWo2t9BJAkbdhPQVWdVZQ/exec';
 
 let master = {};
-let used = JSON.parse(localStorage.getItem('used') || '{}');
 
-function updateCounts(){
+let used = JSON.parse(
+  localStorage.getItem('used') || '{}'
+);
+
+/* =========================
+   件数表示
+========================= */
+
+function updateCounts() {
+
   const total = Object.keys(master).length;
   const checked = Object.keys(used).length;
-  const unsynced = Object.values(used).filter(x => !x.synced).length;
 
-  document.getElementById('count').textContent = total;
-  document.getElementById('unsynced').textContent = unsynced;
-  document.getElementById('checkedCount').textContent = checked + ' / ' + total;
+  const unsynced =
+    Object.values(used)
+      .filter(x => !x.synced)
+      .length;
+
+  document.getElementById('count').textContent =
+    total;
+
+  document.getElementById('unsynced').textContent =
+    unsynced;
+
+  document.getElementById('checkedCount').textContent =
+    checked + ' / ' + total;
 }
 
-function setResult(cls, text, detail=''){
-  const r = document.getElementById('result');
+
+/* =========================
+   結果表示
+========================= */
+
+function setResult(cls, text, detail = '') {
+
+  const r =
+    document.getElementById('result');
+
   r.className = cls;
   r.textContent = text;
-  document.getElementById('detail').textContent = detail;
+
+  document.getElementById('detail').textContent =
+    detail;
 }
 
-function saveUsed(){
-  localStorage.setItem('used', JSON.stringify(used));
+
+/* =========================
+   USED保存
+========================= */
+
+function saveUsed() {
+
+  localStorage.setItem(
+    'used',
+    JSON.stringify(used)
+  );
+
   updateCounts();
 }
 
-function decodeQR(qr){
-  try{
-    let s = qr.replace(/-/g,'+').replace(/_/g,'/');
-    while(s.length%4) s+='=';
-    return JSON.parse(atob(s));
-  }catch(e){ return null; }
+
+/* =========================
+   受付状況リセット
+========================= */
+
+function resetReception() {
+
+  const unsynced =
+    Object.values(used)
+      .filter(x => !x.synced)
+      .length;
+
+  /*
+   * 未同期データが残っている場合は
+   * 誤って受付記録を消さないように
+   * リセットを禁止する。
+   */
+  if (unsynced > 0) {
+
+    alert(
+      '未同期の受付データが ' +
+      unsynced +
+      ' 件あります。\n\n' +
+      '先に「USEDを同期」を実行してください。'
+    );
+
+    return;
+  }
+
+  const confirmed = confirm(
+    '受付状況をリセットしますか？\n\n' +
+    'この端末の受付人数が0件になります。\n' +
+    'スプレッドシートのUSED状態は変更されません。'
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  used = {};
+
+  localStorage.removeItem('used');
+
+  updateCounts();
+
+  setResult(
+    '',
+    'リセット完了',
+    '受付人数を0件にしました。'
+  );
 }
 
-async function loadMaster(){
+
+/* =========================
+   QRデコード
+========================= */
+
+function decodeQR(qr) {
+
   try {
-    setResult('', '取得中...');
 
-    const res = await fetch(GAS_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'loadMaster' })
-    });
+    let s =
+      qr
+        .replace(/-/g, '+')
+        .replace(/_/g, '/');
 
-    const data = await res.json();
+    while (s.length % 4) {
+      s += '=';
+    }
+
+    return JSON.parse(
+      atob(s)
+    );
+
+  } catch (e) {
+
+    return null;
+  }
+}
+
+
+/* =========================
+   最新チケット取得
+========================= */
+
+async function loadMaster() {
+
+  try {
+
+    setResult(
+      '',
+      '取得中...'
+    );
+
+    const res =
+      await fetch(
+        GAS_URL,
+        {
+          method: 'POST',
+
+          body: JSON.stringify({
+            action: 'loadMaster'
+          })
+        }
+      );
+
+    const data =
+      await res.json();
 
     if (!data.ok) {
-      setResult('ng', '取得失敗', data.error || 'APIエラー');
+
+      setResult(
+        'ng',
+        '取得失敗',
+        data.error || 'APIエラー'
+      );
+
       return;
     }
 
-    master = data.result.tickets || {};
-    localStorage.setItem('master', JSON.stringify(master));
+    master =
+      data.result.tickets || {};
+
+    localStorage.setItem(
+      'master',
+      JSON.stringify(master)
+    );
+
     updateCounts();
 
-    setResult('ok', '保存完了', '保存件数: ' + Object.keys(master).length);
+    setResult(
+      'ok',
+      '保存完了',
+      '保存件数: ' +
+      Object.keys(master).length
+    );
 
   } catch (e) {
-    setResult('ng', '取得エラー', e.message || String(e));
+
+    setResult(
+      'ng',
+      '取得エラー',
+      e.message || String(e)
+    );
   }
 }
-function loadLocal(){
-  master = JSON.parse(localStorage.getItem('master') || '{}');
+
+
+/* =========================
+   ローカルチケット読込
+========================= */
+
+function loadLocal() {
+
+  master =
+    JSON.parse(
+      localStorage.getItem('master') || '{}'
+    );
+
   updateCounts();
 }
 
-async function syncUsed(){
-  const list = Object.values(used).filter(x=>!x.synced);
-  if(list.length===0){
-    setResult('', '同期なし');
+
+/* =========================
+   USED同期
+========================= */
+
+async function syncUsed() {
+
+  const list =
+    Object.values(used)
+      .filter(x => !x.synced);
+
+  if (list.length === 0) {
+
+    setResult(
+      '',
+      '同期なし',
+      '未同期データはありません。'
+    );
+
     return;
   }
 
-  const res = await fetch(GAS_URL,{
-    method:'POST',
-    headers:{'Content-Type':'text/plain'},
-    body:JSON.stringify({
-      action:'sync',
-      usedEntries:list
-    })
-  });
+  try {
 
-  const data = await res.json();
+    setResult(
+      '',
+      '同期中...',
+      '未同期: ' + list.length + ' 件'
+    );
 
-  (data.result.results||[]).forEach(r=>{
-    if(r.ok && used[r.tid]) used[r.tid].synced=true;
-  });
+    const res =
+      await fetch(
+        GAS_URL,
+        {
+          method: 'POST',
 
-  saveUsed();
-  setResult('ok','同期完了');
+          headers: {
+            'Content-Type':
+              'text/plain'
+          },
+
+          body: JSON.stringify({
+            action: 'sync',
+            usedEntries: list
+          })
+        }
+      );
+
+    const data =
+      await res.json();
+
+    if (!data.ok) {
+
+      setResult(
+        'ng',
+        '同期失敗',
+        data.error || 'APIエラー'
+      );
+
+      return;
+    }
+
+    (data.result.results || [])
+      .forEach(r => {
+
+        if (
+          r.ok &&
+          used[r.tid]
+        ) {
+
+          used[r.tid].synced =
+            true;
+        }
+      });
+
+    saveUsed();
+
+    setResult(
+      'ok',
+      '同期完了',
+      '同期成功: ' +
+      data.result.synced +
+      ' 件'
+    );
+
+  } catch (e) {
+
+    setResult(
+      'ng',
+      '同期エラー',
+      e.message || String(e)
+    );
+  }
 }
 
-let stream, timer;
 
-async function startCamera(){
-  try{
-    stream = await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:'environment'}
-    });
-    video.srcObject = stream;
+/* =========================
+   カメラ
+========================= */
 
-    const detector = new BarcodeDetector({formats:['qr_code']});
+let stream = null;
+let timer = null;
 
-    timer = setInterval(async()=>{
-      const codes = await detector.detect(video);
-      if(codes.length>0){
-        handleQR(codes[0].rawValue);
-      }
-    },700);
+async function startCamera() {
 
-  }catch(e){
-    setResult('ng','カメラエラー',e.message);
+  try {
+
+    if (
+      !navigator.mediaDevices ||
+      !navigator.mediaDevices.getUserMedia
+    ) {
+
+      setResult(
+        'ng',
+        'カメラ非対応'
+      );
+
+      return;
+    }
+
+    if (
+      !('BarcodeDetector' in window)
+    ) {
+
+      setResult(
+        'ng',
+        'QR読取非対応',
+        'このブラウザではQR読み取りに対応していません。'
+      );
+
+      return;
+    }
+
+    stream =
+      await navigator.mediaDevices
+        .getUserMedia({
+          video: {
+            facingMode: 'environment'
+          }
+        });
+
+    const video =
+      document.getElementById('video');
+
+    video.srcObject =
+      stream;
+
+    const detector =
+      new BarcodeDetector({
+        formats: ['qr_code']
+      });
+
+    setResult(
+      '',
+      '読み取り中...'
+    );
+
+    timer =
+      setInterval(
+        async () => {
+
+          try {
+
+            const codes =
+              await detector.detect(
+                video
+              );
+
+            if (
+              codes.length > 0
+            ) {
+
+              handleQR(
+                codes[0].rawValue
+              );
+            }
+
+          } catch (e) {
+            // 一時的な読取エラーは無視
+          }
+
+        },
+        700
+      );
+
+  } catch (e) {
+
+    setResult(
+      'ng',
+      'カメラエラー',
+      e.message || String(e)
+    );
   }
 }
 
-function stopCamera(){
-  if(timer) clearInterval(timer);
-  if(stream) stream.getTracks().forEach(t=>t.stop());
+
+/* =========================
+   カメラ停止
+========================= */
+
+function stopCamera() {
+
+  if (timer) {
+
+    clearInterval(timer);
+    timer = null;
+  }
+
+  if (stream) {
+
+    stream
+      .getTracks()
+      .forEach(
+        t => t.stop()
+      );
+
+    stream = null;
+  }
+
+  setResult(
+    '',
+    '停止中',
+    'カメラを停止しました。'
+  );
 }
 
-function handleQR(raw){
-  const data = decodeQR(raw);
-  if(!data){ setResult('ng','NG','形式不正'); return; }
 
-  const tid = data.tid;
+/* =========================
+   QR判定
+========================= */
 
-  if(used[tid]){
-    setResult('used','受付済み');
+function handleQR(raw) {
+
+  const data =
+    decodeQR(raw);
+
+  if (!data) {
+
+    setResult(
+      'ng',
+      'NG',
+      'QR形式が不正です。'
+    );
+
     return;
   }
 
-  const m = master[tid];
-  if(!m){
-    setResult('ng','NG','一覧にない');
+  const tid =
+    data.tid;
+
+  if (!tid) {
+
+    setResult(
+      'ng',
+      'NG',
+      'チケットIDがありません。'
+    );
+
     return;
   }
 
-  if(m.status==='USED'){
-    setResult('used','受付済み');
+  /*
+   * この端末ですでに受付済み
+   */
+  if (used[tid]) {
+
+    setResult(
+      'used',
+      '受付済み',
+      'この端末では既に受付済みです。'
+    );
+
     return;
   }
 
-    used[tid] = {
+  const m =
+    master[tid];
+
+  /*
+   * 事前保存一覧に存在しない
+   */
+  if (!m) {
+
+    setResult(
+      'ng',
+      'NG',
+      '保存済みチケット一覧に存在しません。'
+    );
+
+    return;
+  }
+
+  /*
+   * 保存時点ですでにUSED
+   */
+  if (m.status === 'USED') {
+
+    setResult(
+      'used',
+      '受付済み',
+      m.buyer
+        ? m.buyer + ' 様'
+        : ''
+    );
+
+    return;
+  }
+
+  /*
+   * 有効期限
+   */
+  if (
+    data.exp &&
+    Number(data.exp) <
+      Date.now()
+  ) {
+
+    setResult(
+      'ng',
+      'NG',
+      '有効期限切れです。'
+    );
+
+    return;
+  }
+
+  /*
+   * 入場OK
+   */
+
+  used[tid] = {
+
     tid: tid,
-    usedAt: new Date().toISOString(),
+
+    usedAt:
+      new Date()
+        .toISOString(),
+
     synced: false
   };
 
-  localStorage.setItem('used', JSON.stringify(used));
-  updateCounts();
+  saveUsed();
 
-  setResult('ok', 'OK', m.buyer + ' 様');
+  setResult(
+    'ok',
+    'OK',
+    (m.buyer || '') +
+    ' 様'
+  );
 }
 
+
+/* =========================
+   初期化
+========================= */
+
 loadLocal();
+
 </script>
 
 </body>
