@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR受付（オフライン対応）</title>
+
+<style>
+body {
+  font-family: sans-serif;
+  padding: 10px;
+  text-align: center;
+  background: #f7f7f7;
+}
+
+.card {
+  background: #fff;
+  padding: 12px;
+  margin: 10px 0;
+  border-radius: 12px;
+}
+
+video {
+  width: 100%;
+  max-width: 420px;
+  border-radius: 10px;
+}
+
+#result {
+  font-size: 36px;
+  margin: 10px;
+  font-weight: bold;
+  padding: 10px;
+  border-radius: 10px;
+}
+
+#detail {
+  font-size: 22px;
+  font-weight: bold;
+  color: #333;
+  min-height: 30px;
+  margin-top: 8px;
+}
+
+.ok {
+  background: #e7f8eb;
+  color: #0b6b2a;
+}
+
+.ng {
+  background: #fdeaea;
+  color: #a11a1a;
+}
+
+.used {
+  background: #fff3cd;
+  color: #8a5a00;
+}
+
+button {
+  width: 100%;
+  padding: 14px;
+  margin-top: 8px;
+  font-size: 18px;
+  border-radius: 10px;
+  border: none;
+}
+
+.primary {
+  background: #111;
+  color: #fff;
+}
+
+.secondary {
+  background: #ddd;
+  color: #222;
+}
+
+.danger {
+  background: #b3261e;
+  color: #fff;
+}
+
+.small {
+  font-size: 13px;
+  color: #666;
+  margin-top: 6px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="card">
+  <h2>QR受付（オフライン対応）</h2>
+
+  <video id="video" autoplay playsinline muted></video>
+
+  <button class="primary" onclick="startCamera()">
+    カメラ開始
+  </button>
+
+  <button class="secondary" onclick="stopCamera()">
+    停止
+  </button>
+
+  <div id="result">待機中</div>
+  <div id="detail"></div>
+</div>
+
+<div class="card">
+  <strong>受付状況</strong>
+
+  <div class="small">
+    受付人数:
+    <span id="checkedCount">0</span>
+  </div>
+
+  <button class="danger" onclick="resetReception()">
+    受付状況をリセット
+  </button>
+
+  <div class="small">
+    ※未同期データがある場合はリセットできません。
+  </div>
+</div>
+
+<div class="card">
+  <button class="primary" onclick="loadMaster()">
+    最新チケットを保存
+  </button>
+
+  <div class="small">
+    保存済み:
+    <span id="count">0</span>
+  </div>
+</div>
+
+<div class="card">
+  <button class="primary" onclick="syncUsed()">
+    USEDを同期
+  </button>
+
+  <div class="small">
+    未同期:
+    <span id="unsynced">0</span>
+  </div>
+</div>
+
+<script>
+const GAS_URL =
+  'https://script.google.com/macros/s/AKfycbws2XzIg2hytxKEcU89m3tV4FF5cE4vRMfm4vltMcjxKC2vquWo2t9BJAkbdhPQVWdVZQ/exec';
+
+let master = {};
+
+let used = JSON.parse(
+  localStorage.getItem('used') || '{}'
+);
+
+/* =========================
+   件数表示
+========================= */
+
+function updateCounts() {
+  const total = Object.keys(master).length;
+  const checked = Object.keys(used).length;
+
+  const unsynced =
+    Object.values(used)
+      .filter(x => !x.synced)
+      .length;
+
+  document.getElementById('count').textContent =
+    total;
+
+  document.getElementById('unsynced').textContent =
+    unsynced;
+
+  document.getElementById('checkedCount').textContent =
+    checked + ' / ' + total;
+}
+
+
+/* =========================
+   結果表示
+========================= */
+
+function setResult(cls, text, detail = '') {
+  const result =
+    document.getElementById('result');
+
+  result.className = cls;
+  result.textContent = text;
+
+  document.getElementById('detail').textContent =
+    detail;
+}
+
+
+/* =========================
+   購入者名取得
+========================= */
+
+function getBuyerName(tid) {
+  if (
+    used[tid] &&
+    used[tid].buyer
+  ) {
+    return used[tid].buyer;
+  }
+
+  if (
+    master[tid] &&
+    master[tid].buyer
+  ) {
+    return master[tid].buyer;
+  }
+
+  return '';
+}
+
+
+/* =========================
+   USED保存
+========================= */
+
+function saveUsed() {
+  localStorage.setItem(
+    'used',
+    JSON.stringify(used)
+  );
+
+  updateCounts();
+}
+
+
+/* =========================
+   受付状況リセット
+========================= */
+
+function resetReception() {
+  const unsynced =
+    Object.values(used)
+      .filter(x => !x.synced)
+      .length;
+
+  if (unsynced > 0) {
+    alert(
+      '未同期の受付データが ' +
+      unsynced +
+      ' 件あります。\n\n' +
+      '先に「USEDを同期」を実行してください。'
+    );
+
+    return;
+  }
+
+  const confirmed = confirm(
+    '受付状況をリセットしますか？\n\n' +
+    'この端末の受付人数が0件になります。\n' +
+    'スプレッドシートのUSED状態は変更されません。'
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  used = {};
+
+  localStorage.removeItem('used');
+
+  updateCounts();
+
+  setResult(
+    '',
+    'リセット完了',
+    '受付人数を0件にしました。'
+  );
+}
+
+
+/* =========================
+   QRデコード
+========================= */
+
+function decodeQR(qr) {
+  try {
+    let encoded =
+      qr
+        .replace(/-/g, '+')
+        .replace(/_/g, '/');
+
+    while (encoded.length % 4) {
+      encoded += '=';
+    }
+
+    return JSON.parse(
+      atob(encoded)
+    );
+
+  } catch (e) {
+    return null;
+  }
+}
+
+
+/* =========================
+   最新チケット取得
+========================= */
+
+async function loadMaster() {
+  try {
+    setResult(
+      '',
+      '取得中...'
+    );
+
+    const response =
+      await fetch(
+        GAS_URL,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            action: 'loadMaster'
+          })
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if (!data.ok) {
+      setResult(
+        'ng',
+        '取得失敗',
+        data.error || 'APIエラー'
+      );
+
+      return;
+    }
+
+    master =
+      data.result.tickets || {};
+
+    localStorage.setItem(
+      'master',
+      JSON.stringify(master)
+    );
+
+    updateCounts();
+
+    setResult(
+      'ok',
+      '保存完了',
+      '保存件数: ' +
+      Object.keys(master).length
+    );
+
+  } catch (e) {
+    setResult(
+      'ng',
+      '取得エラー',
+      e.message || String(e)
+    );
+  }
+}
+
+
+/* =========================
+   ローカルチケット読込
+========================= */
+
+function loadLocal() {
+  master =
+    JSON.parse(
+      localStorage.getItem('master') || '{}'
+    );
+
+  updateCounts();
+}
+
+
+/* =========================
+   USED同期
+========================= */
+
+async function syncUsed() {
+  const list =
+    Object.values(used)
+      .filter(x => !x.synced);
+
+  if (list.length === 0) {
+    setResult(
+      '',
+      '同期なし',
+      '未同期データはありません。'
+    );
+
+    return;
+  }
+
+  try {
+    setResult(
+      '',
+      '同期中...',
+      '未同期: ' + list.length + ' 件'
+    );
+
+    const response =
+      await fetch(
+        GAS_URL,
+        {
+          method: 'POST',
+
+          headers: {
+            'Content-Type': 'text/plain'
+          },
+
+          body: JSON.stringify({
+            action: 'sync',
+            usedEntries: list
+          })
+        }
+      );
+
+    const data =
+      await response.json();
+
+    if (!data.ok) {
+      setResult(
+        'ng',
+        '同期失敗',
+        data.error || 'APIエラー'
+      );
+
+      return;
+    }
+
+    (data.result.results || [])
+      .forEach(result => {
+        if (
+          result.ok &&
+          used[result.tid]
+        ) {
+          used[result.tid].synced =
+            true;
+        }
+      });
+
+    saveUsed();
+
+    setResult(
+      'ok',
+      '同期完了',
+      '同期成功: ' +
+      data.result.synced +
+      ' 件'
+    );
+
+  } catch (e) {
+    setResult(
+      'ng',
+      '同期エラー',
+      e.message || String(e)
+    );
+  }
+}
+
+
+/* =========================
+   カメラ
+========================= */
+
+let stream = null;
+let timer = null;
+
+async function startCamera() {
+  try {
+    if (
+      !navigator.mediaDevices ||
+      !navigator.mediaDevices.getUserMedia
+    ) {
+      setResult(
+        'ng',
+        'カメラ非対応'
+      );
+
+      return;
+    }
+
+    if (!('BarcodeDetector' in window)) {
+      setResult(
+        'ng',
+        'QR読取非対応',
+        'このブラウザではQR読み取りに対応していません。'
+      );
+
+      return;
+    }
+
+    /*
+     * カメラがすでに動作している場合、
+     * タイマーの重複起動を防止する。
+     */
+    if (timer || stream) {
+      return;
+    }
+
+    stream =
+      await navigator.mediaDevices
+        .getUserMedia({
+          video: {
+            facingMode: 'environment'
+          }
+        });
+
+    const video =
+      document.getElementById('video');
+
+    video.srcObject =
+      stream;
+
+    const detector =
+      new BarcodeDetector({
+        formats: ['qr_code']
+      });
+
+    setResult(
+      '',
+      '読み取り中...'
+    );
+
+    timer =
+      setInterval(
+        async () => {
+          try {
+            const codes =
+              await detector.detect(video);
+
+            if (codes.length > 0) {
+              handleQR(
+                codes[0].rawValue
+              );
+            }
+
+          } catch (e) {
+            // 一時的な読み取りエラーは無視
+          }
+        },
+        700
+      );
+
+  } catch (e) {
+    setResult(
+      'ng',
+      'カメラエラー',
+      e.message || String(e)
+    );
+  }
+}
+
+
+/* =========================
+   カメラ停止
+========================= */
+
+function stopCamera() {
+  if (timer) {
+    clearInterval(timer);
+    timer = null;
+  }
+
+  if (stream) {
+    stream
+      .getTracks()
+      .forEach(track => track.stop());
+
+    stream = null;
+  }
+
+  const video =
+    document.getElementById('video');
+
+  video.srcObject = null;
+
+  setResult(
+    '',
+    '停止中',
+    'カメラを停止しました。'
+  );
+}
+
+
+/* =========================
+   QR判定
+========================= */
+
+function handleQR(raw) {
+  const data =
+    decodeQR(raw);
+
+  if (!data) {
+    setResult(
+      'ng',
+      'NG',
+      'QR形式が不正です。'
+    );
+
+    return;
+  }
+
+  const tid =
+    data.tid;
+
+  if (!tid) {
+    setResult(
+      'ng',
+      'NG',
+      'チケットIDがありません。'
+    );
+
+    return;
+  }
+
+  /*
+   * この端末ですでに受付済み
+   */
+  if (used[tid]) {
+    const buyerName =
+      getBuyerName(tid);
+
+    setResult(
+      'used',
+      '受付済み',
+      buyerName
+        ? buyerName + ' 様'
+        : '購入者名を取得できませんでした。'
+    );
+
+    return;
+  }
+
+  const ticket =
+    master[tid];
+
+  /*
+   * 保存済み一覧に存在しない
+   */
+  if (!ticket) {
+    setResult(
+      'ng',
+      'NG',
+      '保存済みチケット一覧に存在しません。'
+    );
+
+    return;
+  }
+
+  /*
+   * 最新チケット保存時点ですでにUSED
+   */
+  if (ticket.status === 'USED') {
+    setResult(
+      'used',
+      '受付済み',
+      ticket.buyer
+        ? ticket.buyer + ' 様'
+        : '購入者名を取得できませんでした。'
+    );
+
+    return;
+  }
+
+  /*
+   * 有効期限
+   */
+  if (
+    data.exp &&
+    Number(data.exp) < Date.now()
+  ) {
+    setResult(
+      'ng',
+      'NG',
+      '有効期限切れです。'
+    );
+
+    return;
+  }
+
+  /*
+   * 入場OK
+   *
+   * buyerも保存することで、同じQRを再読取した場合でも
+   * 購入者名を表示できるようにする。
+   */
+  used[tid] = {
+    tid: tid,
+    buyer: ticket.buyer || '',
+    usedAt: new Date().toISOString(),
+    synced: false
+  };
+
+  saveUsed();
+
+  setResult(
+    'ok',
+    'OK',
+    ticket.buyer
+      ? ticket.buyer + ' 様'
+      : '名前未登録'
+  );
+}
+
+
+/* =========================
+   初期化
+========================= */
+
+loadLocal();
+
+</script>
+
+</body>
+</html>
