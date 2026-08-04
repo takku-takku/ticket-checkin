@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QR受付（オフライン対応）</title>
 
@@ -31,6 +32,14 @@ video {
   font-weight: bold;
   padding: 10px;
   border-radius: 10px;
+}
+
+#detail {
+  font-size: 22px;
+  font-weight: bold;
+  color: #333;
+  min-height: 30px;
+  margin-top: 8px;
 }
 
 .ok {
@@ -78,7 +87,6 @@ button {
   margin-top: 6px;
 }
 </style>
-
 </head>
 
 <body>
@@ -88,11 +96,16 @@ button {
 
   <video id="video" autoplay playsinline muted></video>
 
-  <button class="primary" onclick="startCamera()">カメラ開始</button>
-  <button class="secondary" onclick="stopCamera()">停止</button>
+  <button class="primary" onclick="startCamera()">
+    カメラ開始
+  </button>
+
+  <button class="secondary" onclick="stopCamera()">
+    停止
+  </button>
 
   <div id="result">待機中</div>
-  <div id="detail" class="small"></div>
+  <div id="detail"></div>
 </div>
 
 <div class="card">
@@ -135,7 +148,6 @@ button {
 </div>
 
 <script>
-
 const GAS_URL =
   'https://script.google.com/macros/s/AKfycbws2XzIg2hytxKEcU89m3tV4FF5cE4vRMfm4vltMcjxKC2vquWo2t9BJAkbdhPQVWdVZQ/exec';
 
@@ -150,7 +162,6 @@ let used = JSON.parse(
 ========================= */
 
 function updateCounts() {
-
   const total = Object.keys(master).length;
   const checked = Object.keys(used).length;
 
@@ -175,15 +186,37 @@ function updateCounts() {
 ========================= */
 
 function setResult(cls, text, detail = '') {
-
-  const r =
+  const result =
     document.getElementById('result');
 
-  r.className = cls;
-  r.textContent = text;
+  result.className = cls;
+  result.textContent = text;
 
   document.getElementById('detail').textContent =
     detail;
+}
+
+
+/* =========================
+   購入者名取得
+========================= */
+
+function getBuyerName(tid) {
+  if (
+    used[tid] &&
+    used[tid].buyer
+  ) {
+    return used[tid].buyer;
+  }
+
+  if (
+    master[tid] &&
+    master[tid].buyer
+  ) {
+    return master[tid].buyer;
+  }
+
+  return '';
 }
 
 
@@ -192,7 +225,6 @@ function setResult(cls, text, detail = '') {
 ========================= */
 
 function saveUsed() {
-
   localStorage.setItem(
     'used',
     JSON.stringify(used)
@@ -207,19 +239,12 @@ function saveUsed() {
 ========================= */
 
 function resetReception() {
-
   const unsynced =
     Object.values(used)
       .filter(x => !x.synced)
       .length;
 
-  /*
-   * 未同期データが残っている場合は
-   * 誤って受付記録を消さないように
-   * リセットを禁止する。
-   */
   if (unsynced > 0) {
-
     alert(
       '未同期の受付データが ' +
       unsynced +
@@ -259,24 +284,21 @@ function resetReception() {
 ========================= */
 
 function decodeQR(qr) {
-
   try {
-
-    let s =
+    let encoded =
       qr
         .replace(/-/g, '+')
         .replace(/_/g, '/');
 
-    while (s.length % 4) {
-      s += '=';
+    while (encoded.length % 4) {
+      encoded += '=';
     }
 
     return JSON.parse(
-      atob(s)
+      atob(encoded)
     );
 
   } catch (e) {
-
     return null;
   }
 }
@@ -287,20 +309,17 @@ function decodeQR(qr) {
 ========================= */
 
 async function loadMaster() {
-
   try {
-
     setResult(
       '',
       '取得中...'
     );
 
-    const res =
+    const response =
       await fetch(
         GAS_URL,
         {
           method: 'POST',
-
           body: JSON.stringify({
             action: 'loadMaster'
           })
@@ -308,10 +327,9 @@ async function loadMaster() {
       );
 
     const data =
-      await res.json();
+      await response.json();
 
     if (!data.ok) {
-
       setResult(
         'ng',
         '取得失敗',
@@ -339,7 +357,6 @@ async function loadMaster() {
     );
 
   } catch (e) {
-
     setResult(
       'ng',
       '取得エラー',
@@ -354,7 +371,6 @@ async function loadMaster() {
 ========================= */
 
 function loadLocal() {
-
   master =
     JSON.parse(
       localStorage.getItem('master') || '{}'
@@ -369,13 +385,11 @@ function loadLocal() {
 ========================= */
 
 async function syncUsed() {
-
   const list =
     Object.values(used)
       .filter(x => !x.synced);
 
   if (list.length === 0) {
-
     setResult(
       '',
       '同期なし',
@@ -386,22 +400,20 @@ async function syncUsed() {
   }
 
   try {
-
     setResult(
       '',
       '同期中...',
       '未同期: ' + list.length + ' 件'
     );
 
-    const res =
+    const response =
       await fetch(
         GAS_URL,
         {
           method: 'POST',
 
           headers: {
-            'Content-Type':
-              'text/plain'
+            'Content-Type': 'text/plain'
           },
 
           body: JSON.stringify({
@@ -412,10 +424,9 @@ async function syncUsed() {
       );
 
     const data =
-      await res.json();
+      await response.json();
 
     if (!data.ok) {
-
       setResult(
         'ng',
         '同期失敗',
@@ -426,14 +437,12 @@ async function syncUsed() {
     }
 
     (data.result.results || [])
-      .forEach(r => {
-
+      .forEach(result => {
         if (
-          r.ok &&
-          used[r.tid]
+          result.ok &&
+          used[result.tid]
         ) {
-
-          used[r.tid].synced =
+          used[result.tid].synced =
             true;
         }
       });
@@ -449,7 +458,6 @@ async function syncUsed() {
     );
 
   } catch (e) {
-
     setResult(
       'ng',
       '同期エラー',
@@ -467,14 +475,11 @@ let stream = null;
 let timer = null;
 
 async function startCamera() {
-
   try {
-
     if (
       !navigator.mediaDevices ||
       !navigator.mediaDevices.getUserMedia
     ) {
-
       setResult(
         'ng',
         'カメラ非対応'
@@ -483,16 +488,21 @@ async function startCamera() {
       return;
     }
 
-    if (
-      !('BarcodeDetector' in window)
-    ) {
-
+    if (!('BarcodeDetector' in window)) {
       setResult(
         'ng',
         'QR読取非対応',
         'このブラウザではQR読み取りに対応していません。'
       );
 
+      return;
+    }
+
+    /*
+     * カメラがすでに動作している場合、
+     * タイマーの重複起動を防止する。
+     */
+    if (timer || stream) {
       return;
     }
 
@@ -523,33 +533,24 @@ async function startCamera() {
     timer =
       setInterval(
         async () => {
-
           try {
-
             const codes =
-              await detector.detect(
-                video
-              );
+              await detector.detect(video);
 
-            if (
-              codes.length > 0
-            ) {
-
+            if (codes.length > 0) {
               handleQR(
                 codes[0].rawValue
               );
             }
 
           } catch (e) {
-            // 一時的な読取エラーは無視
+            // 一時的な読み取りエラーは無視
           }
-
         },
         700
       );
 
   } catch (e) {
-
     setResult(
       'ng',
       'カメラエラー',
@@ -564,23 +565,23 @@ async function startCamera() {
 ========================= */
 
 function stopCamera() {
-
   if (timer) {
-
     clearInterval(timer);
     timer = null;
   }
 
   if (stream) {
-
     stream
       .getTracks()
-      .forEach(
-        t => t.stop()
-      );
+      .forEach(track => track.stop());
 
     stream = null;
   }
+
+  const video =
+    document.getElementById('video');
+
+  video.srcObject = null;
 
   setResult(
     '',
@@ -595,12 +596,10 @@ function stopCamera() {
 ========================= */
 
 function handleQR(raw) {
-
   const data =
     decodeQR(raw);
 
   if (!data) {
-
     setResult(
       'ng',
       'NG',
@@ -614,7 +613,6 @@ function handleQR(raw) {
     data.tid;
 
   if (!tid) {
-
     setResult(
       'ng',
       'NG',
@@ -628,24 +626,27 @@ function handleQR(raw) {
    * この端末ですでに受付済み
    */
   if (used[tid]) {
+    const buyerName =
+      getBuyerName(tid);
 
     setResult(
       'used',
       '受付済み',
-      'この端末では既に受付済みです。'
+      buyerName
+        ? buyerName + ' 様'
+        : '購入者名を取得できませんでした。'
     );
 
     return;
   }
 
-  const m =
+  const ticket =
     master[tid];
 
   /*
-   * 事前保存一覧に存在しない
+   * 保存済み一覧に存在しない
    */
-  if (!m) {
-
+  if (!ticket) {
     setResult(
       'ng',
       'NG',
@@ -656,16 +657,15 @@ function handleQR(raw) {
   }
 
   /*
-   * 保存時点ですでにUSED
+   * 最新チケット保存時点ですでにUSED
    */
-  if (m.status === 'USED') {
-
+  if (ticket.status === 'USED') {
     setResult(
       'used',
       '受付済み',
-      m.buyer
-        ? m.buyer + ' 様'
-        : ''
+      ticket.buyer
+        ? ticket.buyer + ' 様'
+        : '購入者名を取得できませんでした。'
     );
 
     return;
@@ -676,10 +676,8 @@ function handleQR(raw) {
    */
   if (
     data.exp &&
-    Number(data.exp) <
-      Date.now()
+    Number(data.exp) < Date.now()
   ) {
-
     setResult(
       'ng',
       'NG',
@@ -691,16 +689,14 @@ function handleQR(raw) {
 
   /*
    * 入場OK
+   *
+   * buyerも保存することで、同じQRを再読取した場合でも
+   * 購入者名を表示できるようにする。
    */
-
   used[tid] = {
-
     tid: tid,
-
-    usedAt:
-      new Date()
-        .toISOString(),
-
+    buyer: ticket.buyer || '',
+    usedAt: new Date().toISOString(),
     synced: false
   };
 
@@ -709,8 +705,9 @@ function handleQR(raw) {
   setResult(
     'ok',
     'OK',
-    (m.buyer || '') +
-    ' 様'
+    ticket.buyer
+      ? ticket.buyer + ' 様'
+      : '名前未登録'
   );
 }
 
