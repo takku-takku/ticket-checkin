@@ -147,6 +147,9 @@ button {
   </div>
 </div>
 
+<!-- iOS Safariなど、BarcodeDetector非対応ブラウザ用（同じリポジトリから読み込む） -->
+<script src="./jsQR.js"></script>
+
 <script>
 const GAS_URL =
   'https://script.google.com/macros/s/AKfycbws2XzIg2hytxKEcU89m3tV4FF5cE4vRMfm4vltMcjxKC2vquWo2t9BJAkbdhPQVWdVZQ/exec';
@@ -473,6 +476,30 @@ async function syncUsed() {
 
 let stream = null;
 let timer = null;
+let scanBusy = false;
+let lastScanValue = '';
+let lastScanTime = 0;
+
+function processScannedQR(rawValue) {
+  if (!rawValue) {
+    return;
+  }
+
+  const now = Date.now();
+
+  // 同じQRを短時間に連続処理しない。
+  if (
+    rawValue === lastScanValue &&
+    now - lastScanTime < 2000
+  ) {
+    return;
+  }
+
+  lastScanValue = rawValue;
+  lastScanTime = now;
+
+  handleQR(rawValue);
+}
 
 async function startCamera() {
   try {
@@ -488,16 +515,6 @@ async function startCamera() {
       return;
     }
 
-    if (!('BarcodeDetector' in window)) {
-      setResult(
-        'ng',
-        'QR読取非対応',
-        'このブラウザではQR読み取りに対応していません。'
-      );
-
-      return;
-    }
-
     /*
      * カメラがすでに動作している場合、
      * タイマーの重複起動を防止する。
@@ -506,57 +523,202 @@ async function startCamera() {
       return;
     }
 
-    stream =
-      await navigator.mediaDevices
-        .getUserMedia({
-          video: {
-            facingMode: 'environment'
-          }
-        });
-
     const video =
       document.getElementById('video');
 
-    video.srcObject =
-      stream;
+    stream =
+      await navigator.mediaDevices
+        .getUserMedia({
+          audio: false,
+          video: {
+            facingMode: {
+              ideal: 'environment'
+            },
+            width: {
+              ideal: 1280
+            },
+            height: {
+              ideal: 720
+            }
+          }
+        });
 
-    const detector =
-      new BarcodeDetector({
-        formats: ['qr_code']
-      });
+    video.srcObject = stream;
+
+    // iOS Safariでは明示的な再生が必要になる場合がある。
+    await video.play();
 
     setResult(
       '',
-      '読み取り中...'
+      '読み取り中...',
+      'QRコードをカメラに映してください。'
     );
 
-    timer =
-      setInterval(
-        async () => {
-          try {
-            const codes =
-              await detector.detect(video);
-
-            if (codes.length > 0) {
-              handleQR(
-                codes[0].rawValue
-              );
-            }
-
-          } catch (e) {
-            // 一時的な読み取りエラーは無視
-          }
-        },
-        700
-      );
+    if ('BarcodeDetector' in window) {
+      startBarcodeDetector(video);
+    } else {
+      startJsQR(video);
+    }
 
   } catch (e) {
+    stopCamera(false);
+
+    let message =
+      e.message || String(e);
+
+    if (
+      e.name === 'NotAllowedError' ||
+      e.name === 'PermissionDeniedError'
+    ) {
+      message =
+        'カメラの使用が許可されていません。' +
+        'ブラウザの設定からカメラを許可してください。';
+    }
+
     setResult(
       'ng',
       'カメラエラー',
-      e.message || String(e)
+      message
     );
   }
+}
+
+
+/* Android Chromeなど、BarcodeDetector対応ブラウザ用 */
+function startBarcodeDetector(video) {
+  const detector =
+    new BarcodeDetector({
+      formats: ['qr_code']
+    });
+
+  timer =
+    setInterval(
+      async () => {
+        if (
+          scanBusy ||
+          video.readyState < 2
+        ) {
+          return;
+        }
+
+        scanBusy = true;
+
+        try {
+          const codes =
+            await detector.detect(video);
+
+          if (codes.length > 0) {
+            processScannedQR(
+              codes[0].rawValue
+            );
+          }
+        } catch (e) {
+          // 一時的な読み取りエラーは無視
+        } finally {
+          scanBusy = false;
+        }
+      },
+      500
+    );
+}
+
+
+/* iOS Safariなど、BarcodeDetector非対応ブラウザ用 */
+function startJsQR(video) {
+  if (typeof jsQR !== 'function') {
+    setResult(
+      'ng',
+      'QR読取準備エラー',
+      'QR読取ライブラリを読み込めませんでした。通信状態を確認して再読み込みしてください。'
+    );
+
+    stopCamera(false);
+    return;
+  }
+
+  const canvas =
+    document.createElement('canvas');
+
+  const context =
+    canvas.getContext(
+      '2d',
+      {
+        willReadFrequently: true
+      });
+
+    timer =
+      setInterval(
+        () => {
+          if (
+            scanBusy ||
+            video.readyState < 2 ||
+            video.videoWidth === 0 ||
+            video.videoHeight === 0
+          ) {
+            return;
+          }
+
+          scanBusy = true;
+
+          try {
+            // 処理負荷を抑えるため、映像を最大960pxに縮小する。
+            const maxWidth = 960;
+            const scale =
+              Math.min(
+                1,
+                maxWidth / video.videoWidth
+              );
+
+            canvas.width =
+              Math.floor(
+                video.videoWidth * scale
+              );
+
+            canvas.height =
+              Math.floor(
+                video.videoHeight * scale
+              );
+
+            context.drawImage(
+              video,
+              0,
+              0,
+              canvas.width,
+              canvas.height
+            );
+
+            const imageData =
+              context.getImageData(
+                0,
+                0,
+                canvas.width,
+                canvas.height
+              );
+
+            const code =
+              jsQR(
+                imageData.data,
+                imageData.width,
+                imageData.height,
+                {
+                  inversionAttempts:
+                    'dontInvert'
+                }
+              );
+
+            if (code && code.data) {
+              processScannedQR(
+                code.data
+              );
+            }
+          } catch (e) {
+            // 一時的な読み取りエラーは無視
+          } finally {
+            scanBusy = false;
+          }
+        },
+        300
+      );
 }
 
 
@@ -564,7 +726,7 @@ async function startCamera() {
    カメラ停止
 ========================= */
 
-function stopCamera() {
+function stopCamera(showMessage = true) {
   if (timer) {
     clearInterval(timer);
     timer = null;
@@ -578,16 +740,23 @@ function stopCamera() {
     stream = null;
   }
 
+  scanBusy = false;
+  lastScanValue = '';
+  lastScanTime = 0;
+
   const video =
     document.getElementById('video');
 
+  video.pause();
   video.srcObject = null;
 
-  setResult(
-    '',
-    '停止中',
-    'カメラを停止しました。'
-  );
+  if (showMessage) {
+    setResult(
+      '',
+      '停止中',
+      'カメラを停止しました。'
+    );
+  }
 }
 
 
